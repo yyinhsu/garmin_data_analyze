@@ -1,0 +1,15 @@
+INFO:/Users/yinhsu/Documents/side_project/garmin_data_analyze/.venv/lib/python3.12/site-packages/idbutils/version.py:/Users/yinhsu/Documents/side_project/garmin_data_analyze/.venv/bin/garmindb_cli.py has been tested on Python 1...1...0
+INFO:/Users/yinhsu/Documents/side_project/garmin_data_analyze/.venv/lib/python3.12/site-packages/idbutils/version.py:/Users/yinhsu/Documents/side_project/garmin_data_analyze/.venv/bin/garmindb_cli.py 1...1...0
+INFO:/Users/yinhsu/Documents/side_project/garmin_data_analyze/.venv/lib/python3.12/site-packages/garmindb/plugin_manager.py:Loading GarminDb plugins from /Users/yinhsu/HealthData/Plugins
+INFO:/Users/yinhsu/Documents/side_project/garmin_data_analyze/.venv/lib/python3.12/site-packages/idbutils/plugin.py:Loading plugins from /Users/yinhsu/HealthData/Plugins
+INFO:root:Enabled statistics: [<Statistics.monitoring: 1>, <Statistics.steps: 2>, <Statistics.itime: 3>, <Statistics.sleep: 4>, <Statistics.rhr: 5>, <Statistics.weight: 6>, <Statistics.activities: 7>]
+INFO:/Users/yinhsu/Documents/side_project/garmin_data_analyze/.venv/bin/garmindb_cli.py:___Analyzing Data___
+INFO:idbutils.db_object:Found time_col_name timestamp for table Attributes
+INFO:idbutils.db_object:Found time_col_name timestamp for table Device
+INFO:idbutils.db_object:Found time_col_name timestamp for table summary
+INFO:idbutils.db_object:Found time_col_name timestamp for table summary
+INFO:idbutils.db_object:Found time_col_name start_time for table Activities
+INFO:idbutils.db_object:Found time_col_name start_time for table ActivityLaps
+INFO:idbutils.db_object:Found time_col_name start_time for table ActivitySplits
+INFO:idbutils.db_object:Found time_col_name timestamp for table ActivityRecords
+INFO:idbutils.db_object:Found time_col_name avg_pace for table StepsActivities
