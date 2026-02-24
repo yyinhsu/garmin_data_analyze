@@ -1,0 +1,25 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Logs
+sync_*.log
+
+# macOS
+.DS_Store
+
+# Garmin data (large binary files)
+HealthData/
+
+# Credentials (should never be committed)
+GarminConnectConfig.json
+
+# Claude Code local settings (machine-specific permissions)
+.claude/settings.local.json
+
+# GitHub Copilot openspec workflow files (not used in this project)
+.github/prompts/opsx-*.prompt.md
+.github/skills/openspec-*/
