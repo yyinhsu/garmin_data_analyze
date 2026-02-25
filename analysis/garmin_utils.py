@@ -155,15 +155,13 @@ def classify_sleep(df: pd.DataFrame) -> pd.DataFrame:
     """Add sleep deprivation classification columns to a sleep DataFrame.
 
     Adds:
-    - ``is_deprived`` (bool): True if sleep score < 60, qualifier == 'POOR',
-      or total_sleep_hours < 6.
+    - ``is_deprived`` (bool): True if sleep score < 50 or total_sleep_hours < 4.5.
     - ``sleep_quality`` (str): 'Deprived' or 'Adequate'.
     """
     df = df.copy()
     df["is_deprived"] = (
-        (df["score"] < 60)
-        | (df["qualifier"] == "POOR")
-        | (df["total_sleep_hours"] < 6)
+        (df["score"] < 50)
+        | (df["total_sleep_hours"] < 4.5)
     )
     df["sleep_quality"] = df["is_deprived"].map({True: "Deprived", False: "Adequate"})
     return df
