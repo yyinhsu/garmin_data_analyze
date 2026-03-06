@@ -122,6 +122,14 @@ CONTROLLABILITY: dict[str, str] = {
     "time_to_first_rem_min": "LOW",
     "n_awakenings": "LOW",
     "longest_uninterrupted_sleep_h": "LOW",
+    # Lifestyle signals
+    "steps": "MEDIUM",
+    "calories_consumed": "MEDIUM",
+    # New exercise features
+    "sport_category": "HIGH",
+    "is_late_bedtime": "HIGH",
+    "same_day_vigorous_ratio": "HIGH",
+    "same_day_vigorous_min": "HIGH",
 }
 
 # Features known to have partial coverage (< 100% of nights)
@@ -224,6 +232,10 @@ def _temporal_features(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[both, "time_in_bed_hours"] = (
         (df.loc[both, "_end"] - df.loc[both, "_start"]).dt.total_seconds() / 3600
     )
+
+    # Late bedtime flag: sleep_start_hour >= 3.0 (after 03:00 AM); NaN where start is missing
+    df["is_late_bedtime"] = (df["sleep_start_hour"] >= 3.0).where(df["sleep_start_hour"].notna())
+
     return df
 
 
@@ -305,7 +317,29 @@ def _exercise_features(df: pd.DataFrame, acts: pd.DataFrame) -> pd.DataFrame:
     # training_load: numeric, may need coercion
     acts["training_load_num"] = pd.to_numeric(acts["training_load"], errors="coerce")
 
+    # sport_category: cardio / strength / mixed / other
+    _CARDIO_SPORTS = {"running", "cycling", "swimming", "walking", "hiking"}
+    _STRENGTH_SUBS = {"strength_training"}
+    _MIXED_SPORTS = {"basketball", "racket", "soccer", "tennis", "volleyball"}
+
+    def _sport_category(row):
+        sport = row.get("sport", "") or ""
+        sub = row.get("sub_sport", "") or ""
+        if sport in _CARDIO_SPORTS:
+            return "cardio"
+        if sport == "fitness_equipment":
+            return "strength" if sub in _STRENGTH_SUBS else "cardio"
+        if sport in _MIXED_SPORTS:
+            return "mixed"
+        return "other"
+
+    acts["_sport_cat"] = acts.apply(_sport_category, axis=1)
+
     def _primary_sport(x):
+        mode = x.mode()
+        return mode.iloc[0] if len(mode) > 0 else np.nan
+
+    def _primary_cat(x):
         mode = x.mode()
         return mode.iloc[0] if len(mode) > 0 else np.nan
 
@@ -314,6 +348,7 @@ def _exercise_features(df: pd.DataFrame, acts: pd.DataFrame) -> pd.DataFrame:
         total_workout_duration_h=("elapsed_time_hours", "sum"),
         latest_workout_end_hour=("stop_hour", "max"),
         primary_sport=("sport", _primary_sport),
+        sport_category=("_sport_cat", _primary_cat),
         total_vigorous_min=("vigorous_min", "sum"),
         total_mod_min=("elapsed_time_hours", lambda x: (x * 60).sum()),
         training_load_day=("training_load_num", "sum"),
@@ -321,6 +356,9 @@ def _exercise_features(df: pd.DataFrame, acts: pd.DataFrame) -> pd.DataFrame:
     ).reset_index()
 
     daily["vigorous_ratio"] = daily["total_vigorous_min"] / (daily["total_mod_min"] + 1e-9)
+    daily["same_day_vigorous_ratio"] = (daily["total_vigorous_min"] /
+                                        (daily["total_workout_duration_h"] * 60 + 1e-9))
+    daily["same_day_vigorous_min"] = daily["total_vigorous_min"]
     daily["had_exercise"] = True
 
     # rolling 7-day training load
@@ -330,7 +368,8 @@ def _exercise_features(df: pd.DataFrame, acts: pd.DataFrame) -> pd.DataFrame:
     # Merge
     df = df.merge(
         daily[["date", "had_exercise", "n_activities", "total_workout_duration_h",
-               "latest_workout_end_hour", "primary_sport", "vigorous_ratio",
+               "latest_workout_end_hour", "primary_sport", "sport_category",
+               "vigorous_ratio", "same_day_vigorous_ratio", "same_day_vigorous_min",
                "training_load_day", "training_load_7d", "hrz_high_intensity_min"]],
         left_on="day", right_on="date", how="left",
     )
