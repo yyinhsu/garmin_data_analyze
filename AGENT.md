@@ -1,5 +1,13 @@
 # Project Instructions
 
+## Documentation Sync Rule
+
+**When any operational content in this file changes** (setup steps, usage commands, system architecture, skills, or code quality workflows), you **must** also update both:
+- `README.md` (English)
+- `README_ZH.md` (Traditional Chinese)
+
+Keep all three files in sync. `CLAUDE.md` is a symlink to this file and does not need separate edits.
+
 ## Database Schema
 
 資料庫架構請看 `DATABASE_SCHEMA_ZH.md`（中文）或 `DATABASE_SCHEMA.md`（英文）。
