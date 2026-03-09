@@ -640,8 +640,8 @@ def _sleep_architecture(df: pd.DataFrame) -> pd.DataFrame:
         else:
             sleep_start = night_row["_start"].iloc[0]
 
-        def _minutes_from_start(ts):
-            return (ts - sleep_start).total_seconds() / 60
+        def _minutes_from_start(ts, _ref=sleep_start):  # noqa: B023
+            return (ts - _ref).total_seconds() / 60
 
         first_deep = grp[grp["event"] == "deep_sleep"]["timestamp"].min()
         first_rem = grp[grp["event"] == "rem_sleep"]["timestamp"].min()
@@ -685,7 +685,8 @@ def build_sleep_features(verbose: bool = True) -> pd.DataFrame:
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-    from garmin_utils import load_sleep_data, load_activities, _read_sql as _gu_sql
+    from garmin_utils import load_activities, load_sleep_data
+
     from customized.data_preproccess_customizers import filter_nighttime_activities
 
     if verbose:
