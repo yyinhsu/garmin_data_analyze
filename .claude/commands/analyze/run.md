@@ -167,7 +167,7 @@ End your response with this block:
 
 When the user says "結束分析" (or you have sufficient conclusions):
 1. Write a Markdown story with: 核心結論（附數值）、因果鏈、無顯著發現的路徑、後續建議
-2. Save it:
+2. Save it (this also auto-generates `story.md` with embedded charts and `workflow.ipynb`):
 
 ```bash
 .venv/bin/python -c "
@@ -177,6 +177,11 @@ from auto_analyst.session import Session
 session = Session.latest_unfinished()
 story = '''STORY_MARKDOWN'''
 session.save_story(story)
-print('Story saved to:', session.session_dir / 'story.md')
+print('Saved:', session.session_dir)
 "
 ```
+
+`save_story()` automatically produces three files:
+- `story.md` — narrative report with embedded chart images
+- `workflow.ipynb` — Jupyter notebook with all code, outputs, charts, and insights per node
+- `tree.md` — raw analysis tree in Markdown
