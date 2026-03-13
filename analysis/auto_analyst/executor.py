@@ -50,6 +50,8 @@ def run(code: str, output_dir: Path, node_id: int, timeout: int = 120) -> Execut
         import matplotlib
         matplotlib.use("Agg")   # non-interactive backend
         import matplotlib.pyplot as plt
+        matplotlib.rcParams["font.family"] = ["Arial Unicode MS", "Heiti TC", "PingFang HK", "sans-serif"]
+        matplotlib.rcParams["axes.unicode_minus"] = False  # fix minus sign rendering
         import numpy as np
         import pandas as pd
         import seaborn as sns
