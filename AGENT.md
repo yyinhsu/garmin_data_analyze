@@ -27,46 +27,40 @@ Do NOT use the system `python3`.
 
 ## Autonomous Analysis Agent
 
-`analysis/auto_analyst/` 是一個自主數據分析系統，讓 AI 自動決定要繪製什麼圖表、計算哪些指標，並根據結果決定下一步探索方向，最終輸出分析故事線。
+`analysis/auto_analyst/` 是 Claude Code 直接驅動的自主數據分析系統。**不使用任何外部 LLM API**（無 Gemini、無 Anthropic key）。Claude 本身就是 agent，負責：生成分析代碼、執行、看圖解讀、決定下一步。
 
 ### 架構
 ```
 analysis/auto_analyst/
-├── orchestrator.py   # 主迴圈
-├── agent.py          # Gemini API 呼叫（代碼生成 + 結果解讀）
-├── executor.py       # subprocess 執行代碼，擷取 stdout + PNG
-├── tree.py           # 分析樹（JSON 儲存、摘要生成）
-├── prompts.py        # Prompt templates
-├── run.py            # CLI 入口
-└── outputs/          # 每次執行結果（PNG + tree.json + story.md）
+├── executor.py   # subprocess 執行代碼，prepend 資料載入 preamble，擷取 stdout + PNG
+├── tree.py       # AnalysisTree：節點資料結構、JSON 儲存、Markdown 輸出
+├── session.py    # Session：找/建 session、跨對話斷點續傳
+└── outputs/      # 每次執行結果（PNG + tree.json + story.md）[gitignored]
 ```
 
-### 設定
-API Key 存放在專案根目錄 `.env`（已加入 `.gitignore`）：
-```
-GEMINI_API_KEY=sk-...
-```
+> **舊的 Gemini 方案**（agent.py / orchestrator.py）保存於 git branch `archive/gemini-auto-analyst`。
 
 ### 啟動方式
-```bash
-# CLI
-cd analysis
-../.venv/bin/python auto_analyst/run.py "分析主題" --max-iter 12
 
-# Python
-from auto_analyst import run
-run(topic="睡眠品質惡化的原因", max_iterations=12)
-```
+使用 `/analyze:run <主題>` skill 啟動分析。Claude 會：
+1. 找是否有未完成的 session（斷點續傳）
+2. 先跑探索性總覽（correlation matrix）
+3. 每輪暫停，等你決定繼續方向
+4. 最後輸出 `story.md`（核心結論 + 因果鏈 + 分析路徑）
+
+使用 `/analyze:status` 查看最近一次 session 的結果。
 
 ### 分析迴圈邏輯
-每次迭代 Agent 會：
-1. 根據假設生成 Python 分析代碼
-2. 執行代碼，儲存 PNG + 擷取數值指標
-3. 看圖 + 看數字 → 解讀發現
-4. 選擇決策：**a 深挖 / b 側探 / c 回溯 / d 停止**
-5. 所有節點存入 `tree.json`，最後合成 `story.md`
+```
+探索性總覽 → 提出假設 → 生成代碼 → 執行 → 看圖 + 數值
+     ↑                                              ↓
+     └──────── 你決定方向 ←── Claude 解讀 + 暫停 ──┘
+```
+決策：**a 深挖 / b 側探 / c 回溯 / d 結論**，所有節點存入 `tree.json`。
 
-使用 `/analyze:run` skill 可快速啟動，`/analyze:status` 可查看最近一次結果。
+### 跨對話續傳
+
+Session 狀態存在 `outputs/<timestamp>/tree.json`。有 `tree.json` 但無 `story.md` 的 session 視為未完成，下次 `/analyze:run` 會自動繼續。
 
 ## Code Quality
 

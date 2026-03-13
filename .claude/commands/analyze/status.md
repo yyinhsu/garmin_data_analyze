@@ -1,40 +1,46 @@
 ---
-name: "Analyze: Show Latest Results"
-description: Show the story and tree from the most recent autonomous analysis run
-category: Analysis
-tags: [analysis, autonomous, status]
+name: "Analyze: Status"
+description: Show the story and tree from the most recent analysis session
 ---
 
-Show results from the most recent `auto_analyst` run.
+Show results from the most recent analysis session.
 
 ## Steps
 
-### 1. Find latest output directory
+### 1. Find latest session
 
 ```bash
-ls -t analysis/auto_analyst/outputs/ | head -1
+cd /Users/yinhsu/Documents/side_project/garmin_data_analyze
+.venv/bin/python -c "
+import sys; sys.path.insert(0, 'analysis')
+from auto_analyst.session import Session
+
+session = Session.load_latest()
+if not session:
+    print('NO_SESSION')
+else:
+    print('DIR:', session.session_dir)
+    print('TOPIC:', session.topic)
+    print('NODES:', session.node_count)
+    print('FINISHED:', session.is_finished())
+    print(session.summary())
+"
 ```
 
-If no outputs exist, say: "No analysis runs found. Use `/analyze:run` to start one."
+If no session, say: "尚無分析記錄。使用 `/analyze:run <主題>` 開始分析。"
 
-### 2. Show story
+### 2. Show story (if finished)
 
-Read and display `outputs/<latest>/story.md` in full.
+Read `story.md` from the session directory and display it in full.
 
-### 3. Show analysis tree
+### 3. Show tree summary
 
-Read `outputs/<latest>/tree.json`, then print a compact tree:
-```
-節點 0 [parent: —  ] 假設: ... → 決策: a深挖
-  節點 1 [parent: 0] 假設: ... → 決策: b側探
-  節點 2 [parent: 0] 假設: ... → 決策: c回溯
-節點 3 [parent: —  ] 假設: ... → 決策: d停止
-```
+Display the tree summary from the Python output above.
 
 ### 4. List charts
 
 ```bash
-ls analysis/auto_analyst/outputs/<latest>/*.png
+ls analysis/auto_analyst/outputs/<session_dir>/*.png 2>/dev/null
 ```
 
-List each chart filename with its node number.
+List each chart with its node number. Offer to show any specific chart with the Read tool if the user wants to see it.
