@@ -137,9 +137,10 @@ def run(
         else:  # a or b
             next_hyp = interp.get("next_hypothesis", "").strip()
             if not next_hyp:
-                _log("未提供下一假設，使用側探方向")
-                next_hyp = f"探索與 [{hypothesis}] 相關的其他變數"
-            hypothesis = next_hyp
+                _log("未提供下一假設，回溯並重設")
+                parent_id, hypothesis = tree.backtrack()
+            else:
+                hypothesis = next_hyp
 
     # ------------------------------------------------------------------ #
     # Final story

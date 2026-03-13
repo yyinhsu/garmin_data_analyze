@@ -9,6 +9,29 @@ Prompt templates for the two agent calls:
 # Column catalogue shown to the code-generation agent
 # ─────────────────────────────────────────────────────────────────────────────
 COLUMN_CATALOGUE = """
+### 資料來源說明
+分析時可直接查詢 SQLite 資料庫：
+- 跑步/運動資料：`sqlite3.connect('../HealthData/DBs/garmin_activities.db')`
+  - 主表 `activities`：每一筆為一次活動
+  - 睡眠特徵矩陣：`from customized.sleep_feature_builder import build_sleep_features`（每晚一列）
+- 每日彙總：`sqlite3.connect('../HealthData/DBs/garmin.db')` → 表 `daily_summary`
+
+### 跑步活動欄位（activities 表，WHERE sport='running'，共 26 筆）
+- **時間地點**：start_time, elapsed_time, moving_time
+- **表現指標**：avg_speed (m/s), max_speed, avg_cadence, max_cadence
+- **生理指標**：avg_hr, max_hr, calories
+- **地形**：ascent (m), descent (m), distance (km)
+- **心率區間時長**：hrz_1_time ~ hrz_5_time（字串格式 HH:MM:SS）
+- **主觀評分**：self_eval_feel, self_eval_effort, training_load, training_effect
+- 衍生欄位建議：
+  - `pace_min_km = elapsed_time_sec / (distance_km * 60)`（越小越快）
+  - `aerobic_efficiency = avg_speed / avg_hr`（越大越省力）
+  - `vigorous_ratio = (hrz4_sec + hrz5_sec) / elapsed_sec`
+
+### 每日彙總欄位（daily_summary 表）
+day, rhr, stress_avg, steps, vigorous_activity_time, spo2_avg, rr_waking_avg
+
+### 睡眠特徵矩陣（build_sleep_features() 回傳，可與跑步資料 JOIN 當天日期）
 ### 睡眠基本指標
 day, score, total_sleep_hours, deep_sleep_hours, light_sleep_hours, rem_sleep_hours,
 sleep_start_hour, sleep_start_minute, n_awakenings, time_to_first_deep_min,
@@ -41,6 +64,10 @@ steps, calories_consumed (全NULL), resting_hr, weekday
 CODE_GENERATION_SYSTEM = """\
 你是一個自主數據分析 Agent，專門分析 Garmin 個人健康數據。
 你的目標是驗證或否定一個分析假設，並輸出可量化的指標供後續決策使用。
+
+【關鍵限制】
+- 所有 DataFrame 已預載，絕對不要重複 import 或讀取資料庫
+- 代碼必須從統計計算開始，第一行就是分析邏輯
 """
 
 CODE_GENERATION_USER = """\
@@ -59,17 +86,51 @@ CODE_GENERATION_USER = """\
 ## 可用欄位
 {column_catalogue}
 
-## 代碼規範
-1. 呼叫 `df = build_sleep_features()` 取得資料（已由環境自動 import）
-2. 衍生欄位 `is_deprived = (df["score"] < 50) | (df["total_sleep_hours"] < 4.5)`
-3. 必須 print 出關鍵指標，格式範例：
-   ```
-   print(f"Spearman r = {{r:.3f}}, p = {{p:.4f}}, n = {{n}}")
-   print(f"Mean score (A) = {{a:.1f}}, Mean score (B) = {{b:.1f}}")
-   print(f"Effect size (rank-biserial r) = {{eff:.3f}}")
-   ```
-4. 繪製 1-2 張圖後呼叫 `plt.show()` — 系統會自動儲存為 PNG
-5. 只輸出純 Python 代碼，不要加任何說明文字或 markdown fence
+## ⚠️ 重要：以下變數已在執行環境中預載，可直接使用
+
+| 變數 | 說明 |
+|------|------|
+| `runs` | 跑步活動（21筆），距離 >= 0.5 km，含衍生欄位 |
+| `daily` | 每日彙總（rhr, stress_avg, steps, spo2_avg） |
+| `df_sleep` | 睡眠特徵矩陣（150 欄） |
+| `runs_daily` | runs LEFT JOIN daily（同一天） |
+| `runs_sleep` | runs LEFT JOIN 前一晚睡眠（score, total_sleep_hours, deep_sleep_hours） |
+
+已預載的 library（直接使用，**不要重複 import**）：
+`pandas as pd`, `numpy as np`, `matplotlib.pyplot as plt`, `scipy.stats`
+
+### `runs` 的重要欄位
+- `pace_min_km` — 配速（分/公里），越小越快
+- `aerobic_eff` — 有氧效率 avg_speed / avg_hr，越大越省力
+- `avg_hr`, `max_hr` — 平均/最高心率
+- `avg_cadence` — 步頻（步/分）
+- `vigorous_ratio` — 高強度心率區間佔比
+- `distance_km`, `elapsed_sec`, `hour`, `date`
+- `ascent` — 爬升高度 (m)
+
+## 代碼規範（嚴格遵守）
+1. **絕對不要** import pandas, numpy, matplotlib, scipy, sqlite3 或讀取資料庫 — 已預載
+2. **第一行必須是統計計算或分析邏輯**（不是 import，不是數據載入）
+3. 必須 print 出關鍵指標，例如：
+   `print(f"Spearman r = {{r:.3f}}, p = {{p:.4f}}, n = {{n}}")`
+4. 繪製 1-2 張圖後呼叫 `plt.show()` — 系統會自動儲存 PNG
+5. 只輸出純 Python 代碼，不加說明文字，不加 markdown fence
+6. 確保所有字串、括號、引號正確閉合
+
+## 代碼模板（參考結構）
+```python
+# 步驟1：計算相關係數
+from scipy.stats import spearmanr
+r, p = spearmanr(runs["pace_min_km"].dropna(), runs["avg_hr"].dropna())
+print(f"配速 vs 心率: Spearman r={{r:.3f}}, p={{p:.4f}}, n={{len(runs)}}")
+
+# 步驟2：繪圖
+fig, ax = plt.subplots()
+ax.scatter(runs["avg_hr"], runs["pace_min_km"])
+ax.set_xlabel("avg_hr"); ax.set_ylabel("pace_min_km")
+ax.set_title("心率 vs 配速")
+plt.show()
+```
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -106,13 +167,8 @@ INTERPRET_USER = """\
    - d) 停止 — 已有足夠強的結論，不需要繼續
 3. 如果選 a 或 b，提出下一個具體假設（一句話）
 
-**必須**以下列 JSON 格式輸出（不要加任何其他文字）：
-{{
-  "insight": "...",
-  "decision": "a|b|c|d",
-  "rationale": "為什麼這樣決定（1句）",
-  "next_hypothesis": "下一個假設（選a/b時填寫，否則留空字串）"
-}}
+**必須**以下列格式輸出，**JSON 必須在一行內**（insight 中不得有換行符）：
+{{"insight": "...", "decision": "a|b|c|d", "rationale": "1句", "next_hypothesis": "..."}}
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
