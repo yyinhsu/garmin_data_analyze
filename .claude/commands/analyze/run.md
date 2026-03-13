@@ -11,15 +11,78 @@ You are the analysis agent. No external LLM API is used — YOU drive the entire
 
 ## Data available (pre-loaded by executor preamble)
 
+### Pre-joined DataFrames
+
 | Variable | Content |
 |----------|---------|
-| `runs` | 跑步活動（距離≥0.5km），含 `pace_min_km`, `aerobic_eff`, `avg_hr`, `avg_cadence`, `vigorous_ratio`, `distance_km`, `elapsed_sec`, `hour`, `date`, `ascent` |
-| `daily` | 每日彙總：`rhr`, `stress_avg`, `steps`, `spo2_avg` |
+| `runs` | 跑步活動（距離≥0.5km），含 `pace_min_km`, `aerobic_eff`, `avg_hr`, `avg_cadence`, `vigorous_ratio`, `distance_km`, `elapsed_sec`, `hour`, `date`, `ascent`, `start_time`, `stop_time` |
+| `daily` | 每日彙總：`rhr`, `stress_avg`, `steps`, `spo2_avg`, `bb_charged`, `bb_max`, `bb_min` |
 | `df_sleep` | 睡眠特徵矩陣（150欄）：`score`, `total_sleep_hours`, `deep_sleep_hours`, `rem_sleep_hours`, `is_deprived`, `rolling_7d_sleep_avg`, `pre_sleep_hr_avg_Xh`, `pre_sleep_stress_avg_Xh` … |
 | `runs_daily` | runs LEFT JOIN daily（同一天） |
 | `runs_sleep` | runs LEFT JOIN 前一晚睡眠（score, total_sleep_hours, deep_sleep_hours） |
 
+### Raw time-series (for feature engineering)
+
+| Variable | Content |
+|----------|---------|
+| `mon_hr` | `timestamp`, `heart_rate`（每 ~3 分鐘）|
+| `mon_stress` | `timestamp`, `stress`（已濾掉未測量/睡眠的負值）|
+
+### Helper function
+
+```python
+pre_run_window(run_row, hours_before=3, source="hr")
+# → Series of HR or stress values in [start_time - N hours, start_time)
+# source: "hr" or "stress"
+```
+
 Pre-loaded imports: `pd`, `np`, `plt`, `sns`, `stats`, `spearmanr`, `pearsonr`, `mannwhitneyu`, `ttest_ind`, `lowess`
+
+---
+
+## Feature engineering — 積極自己做！
+
+**不要只用現有欄位。** 根據假設在分析代碼開頭加工衍生特徵。常見範例：
+
+```python
+# 跑前 3h HR 均值 & 趨勢斜率
+runs["pre_hr_mean_3h"] = runs.apply(
+    lambda r: pre_run_window(r, 3, "hr").mean(), axis=1)
+runs["pre_hr_slope_3h"] = runs.apply(
+    lambda r: (lambda s: np.polyfit(range(len(s)), s, 1)[0] if len(s) > 2 else np.nan)(
+        pre_run_window(r, 3, "hr").values), axis=1)
+
+# 跑前 2h 壓力均值
+runs["pre_stress_2h"] = runs.apply(
+    lambda r: pre_run_window(r, 2, "stress").mean(), axis=1)
+
+# 當天 Body Battery 下降幅度（日內最高 - 最低）
+runs_bb = runs.merge(daily[["day","bb_charged","bb_max","bb_min"]], left_on="date", right_on="day", how="left")
+runs_bb["bb_drop"] = runs_bb["bb_max"] - runs_bb["bb_min"]
+
+# 跑步當天的睡眠（同一晚，非前一晚）
+runs_sleep_same = runs.merge(df_sleep[["day","score","total_sleep_hours"]], left_on="date", right_on="day", how="left")
+```
+
+其他可以考慮的衍生特徵：
+- 跑前 1h / 2h / 3h 心率與靜息心率的差值（`pre_hr_mean - rhr`）
+- 跑前壓力趨勢（上升 or 下降）
+- 前 7 天累積跑量（疲勞指標）
+- 跑步距離 / 最近一次跑步的間隔天數
+
+---
+
+## Step 0 — Sync latest Garmin data
+
+Before starting analysis, run an incremental sync to pull the latest data from Garmin Connect:
+
+```bash
+cd /Users/yinhsu/Documents/side_project/garmin_data_analyze
+./sync_garmin.sh 2>&1 | tail -20
+```
+
+- If the sync **succeeds**, proceed to Step 1.
+- If it **fails** (network error, credentials expired, etc.), tell the user and ask whether to continue with existing data or abort.
 
 ---
 

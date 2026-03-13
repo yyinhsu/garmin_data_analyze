@@ -1,14 +1,14 @@
 # Garmin Data Analyze
 
 Personal health data analysis system built on top of [GarminDB](https://github.com/tcgoetz/GarminDB).
-Syncs data from Garmin Connect and runs both manual notebook analysis and an **autonomous AI analysis agent**.
+Syncs data from Garmin Connect and runs both manual notebook analysis and a **Claude-driven analysis agent**.
 
 ## What It Does
 
 - Syncs Garmin Connect data locally (sleep, activities, heart rate, stress, SpO2, etc.)
 - Provides a rich feature matrix (150+ columns) for analysis via `build_sleep_features()`
 - Includes hand-crafted Jupyter notebooks for sleep quality investigation
-- Ships an **autonomous analysis agent** that explores a topic end-to-end without manual intervention
+- Ships a **Claude-driven analysis agent** — Claude Code directly drives code generation, chart interpretation, and decision-making (no external LLM API required)
 
 ---
 
@@ -38,16 +38,6 @@ cp ~/.GarminDb/GarminConnectConfig.json.example ~/.GarminDb/GarminConnectConfig.
 
 Data is stored locally in `./HealthData/DBs/` — never uploaded anywhere.
 
-### 4. Configure Gemini API key (for autonomous agent)
-
-Create a `.env` file at the project root:
-
-```
-GEMINI_API_KEY=your_key_here
-```
-
-Get a free key at https://aistudio.google.com/app/apikey
-
 ---
 
 ## Project Structure
@@ -57,61 +47,55 @@ garmin_data_analyze/
 ├── analysis/
 │   ├── customized/
 │   │   └── sleep_feature_builder.py   # 150-column feature matrix
-│   ├── auto_analyst/                  # Autonomous analysis agent
-│   │   ├── orchestrator.py            # Main loop
-│   │   ├── agent.py                   # Gemini API calls
+│   ├── auto_analyst/                  # Claude-driven analysis agent
 │   │   ├── executor.py                # Code execution + PNG capture
 │   │   ├── tree.py                    # Analysis tree (JSON)
-│   │   ├── prompts.py                 # Prompt templates
-│   │   ├── run.py                     # CLI entry point
-│   │   └── outputs/                   # Per-run results
+│   │   ├── session.py                 # Session lifecycle + resume
+│   │   └── outputs/                   # Per-run results (gitignored)
 │   ├── sleep_analysis.ipynb
 │   ├── sleep_deep_analysis.ipynb
 │   └── sleep_causal_investigation.ipynb
 ├── tests/                             # Unit tests (pytest)
 ├── pyproject.toml                     # Ruff + pytest config
 ├── requirements.txt
-├── sync_garmin.sh
-└── .env                               # API keys (gitignored)
+└── sync_garmin.sh
 ```
 
 ---
 
 ## Autonomous Analysis Agent
 
-The agent takes a topic, then autonomously loops:
+**Claude Code is the agent** — no external LLM API, no Gemini key required. Claude directly generates analysis code, executes it, reads the charts (multimodal), and decides the next step.
 
-1. **Generates** Python analysis code based on the current hypothesis
-2. **Executes** it — captures stdout metrics + saves PNG charts
-3. **Interprets** charts and numbers using Gemini Vision
-4. **Decides** next step: drill-down / side-explore / backtrack / stop
-5. Saves every node to `tree.json`, synthesises a final `story.md`
+### How it works
 
-### Run via CLI
-
-```bash
-cd analysis
-../.venv/bin/python auto_analyst/run.py "What causes poor sleep quality?" --max-iter 12
+```
+Exploratory overview → Propose hypothesis → Generate code → Execute
+        ↑                                                       ↓
+        └──────── You decide direction ←── Claude interprets ──┘
 ```
 
-### Run via Python
+Each round Claude pauses and presents findings; you decide to continue, change direction, or end. Sessions persist across conversations via `tree.json` — `/analyze:run` auto-resumes unfinished sessions.
 
-```python
-import sys; sys.path.insert(0, 'analysis')
-from auto_analyst import run
-run(topic="What causes poor sleep quality?", max_iterations=12)
+### Start an analysis
+
+Use the Claude Code skill:
+
+```
+/analyze:run 什麼因素影響跑步表現
 ```
 
 ### Output
 
-Each run saves to `analysis/auto_analyst/outputs/<timestamp>/`:
+Each session saves to `analysis/auto_analyst/outputs/<timestamp>/`:
 
 | File | Content |
 |------|---------|
 | `tree.json` | Full analysis tree with all nodes |
 | `tree.md` | Human-readable tree |
-| `story.md` | Final narrative conclusion |
-| `node_N_chart_M.png` | Charts generated per iteration |
+| `story.md` | Final narrative report with embedded charts |
+| `workflow.ipynb` | Jupyter notebook with all code, outputs, and insights |
+| `node_N_chart_M.png` | Charts generated per node |
 
 ### Decision types
 
@@ -120,7 +104,7 @@ Each run saves to `analysis/auto_analyst/outputs/<timestamp>/`:
 | a — drill-down | Dig deeper into the current finding |
 | b — side-explore | Bring in a new related variable |
 | c — backtrack | Dead end — return to a previous node |
-| d — stop | Sufficient conclusion reached |
+| d — conclude | Sufficient conclusion reached |
 
 ---
 

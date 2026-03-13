@@ -86,11 +86,31 @@ def run(code: str, output_dir: Path, node_id: int, timeout: int = 120) -> Execut
 
         _conn_g = sqlite3.connect("../HealthData/DBs/garmin.db")
         daily = pd.read_sql_query(
-            "SELECT day, rhr, stress_avg, steps, spo2_avg FROM daily_summary",
+            "SELECT day, rhr, stress_avg, steps, spo2_avg, bb_charged, bb_max, bb_min FROM daily_summary",
             _conn_g,
         )
+        mon_stress = pd.read_sql_query("SELECT timestamp, stress FROM stress", _conn_g)
         _conn_g.close()
         daily["day"] = pd.to_datetime(daily["day"])
+        mon_stress["timestamp"] = pd.to_datetime(mon_stress["timestamp"])
+        mon_stress = mon_stress[mon_stress["stress"] >= 0]  # -1/-2 = unmeasured/sleep
+
+        _conn_m = sqlite3.connect("../HealthData/DBs/garmin_monitoring.db")
+        mon_hr = pd.read_sql_query("SELECT timestamp, heart_rate FROM monitoring_hr", _conn_m)
+        _conn_m.close()
+        mon_hr["timestamp"] = pd.to_datetime(mon_hr["timestamp"])
+
+        def pre_run_window(run_row, hours_before, source="hr"):
+            # Returns Series of HR or stress values in [start_time - hours_before h, start_time)
+            # source: "hr" -> mon_hr heart_rate, "stress" -> mon_stress stress
+            t_end   = pd.to_datetime(run_row["start_time"])
+            t_start = t_end - pd.Timedelta(hours=hours_before)
+            if source == "hr":
+                df, col = mon_hr, "heart_rate"
+            else:
+                df, col = mon_stress, "stress"
+            mask = (df["timestamp"] >= t_start) & (df["timestamp"] < t_end)
+            return df.loc[mask, col].reset_index(drop=True)
 
         df_sleep = build_sleep_features()
         df_sleep["day"] = pd.to_datetime(df_sleep["day"])
@@ -103,7 +123,8 @@ def run(code: str, output_dir: Path, node_id: int, timeout: int = 120) -> Execut
         runs_sleep = runs.merge(df_sleep_lag, left_on="date", right_on="run_date", how="left")
 
         print(f"Running sessions available: {{len(runs)}}")
-        print(f"Columns: {{list(runs.columns)}}")
+        print(f"mon_hr rows: {{len(mon_hr)}}, mon_stress rows: {{len(mon_stress)}}")
+        print(f"daily columns: {{list(daily.columns)}}")
 
         # --- Chart save helper ---
         _CHART_DIR = {str(output_dir)!r}
