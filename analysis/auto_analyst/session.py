@@ -18,7 +18,7 @@ from .tree import AnalysisTree
 
 OUTPUTS_DIR = Path(__file__).parent / "outputs"
 
-DECISION_LABELS = {"a": "深挖↓", "b": "側探→", "c": "回溯↑", "d": "結論✓"}
+STATUS_LABELS = {"open": "🔵 探索中", "closed": "✅ 已結"}
 
 
 class Session:
@@ -105,8 +105,9 @@ class Session:
         stdout: str,
         png_paths: list[str],
         insight: str,
-        decision: str,
-        next_hypothesis: str = "",
+        mini_summary: str = "",
+        status: str = "open",
+        next_hypotheses: list[str] | None = None,
     ):
         return self.tree.add_node(
             hypothesis=hypothesis,
@@ -115,10 +116,20 @@ class Session:
             stdout=stdout,
             png_paths=png_paths,
             insight=insight,
-            decision=decision,
-            decision_rationale="",
-            next_hypothesis=next_hypothesis,
+            mini_summary=mini_summary,
+            status=status,
+            next_hypotheses=next_hypotheses or [],
         )
+
+    def close_node(self, node_id: int, mini_summary: str):
+        """Mark a node closed with a mini-summary."""
+        self.tree.close_node(node_id, mini_summary)
+
+    def open_leaves(self):
+        return self.tree.open_leaves()
+
+    def all_closed(self) -> bool:
+        return self.tree.all_closed()
 
     # ------------------------------------------------------------------ #
     # Finalisation: story.md (with charts) + workflow.ipynb
@@ -142,9 +153,9 @@ class Session:
             node_pngs = [p for p in node.png_paths if Path(p).exists()]
             if not node_pngs:
                 continue
-            label = DECISION_LABELS.get(node.decision, node.decision)
+            status_icon = "✅" if node.status == "closed" else "🔵"
             charts_section.append(
-                f"\n### 節點 {node.node_id} {label} — {node.hypothesis}\n"
+                f"\n### 節點 {node.node_id} {status_icon} — {node.hypothesis}\n"
             )
             for png_path in node_pngs:
                 fname = Path(png_path).name
@@ -179,14 +190,14 @@ class Session:
 
         # One section per node
         for node in self.tree.nodes:
-            label = DECISION_LABELS.get(node.decision, node.decision)
             parent_str = f"父節點: {node.parent_id}" if node.parent_id is not None else "根節點"
 
+            status_icon = "✅" if node.status == "closed" else "🔵"
             # Node header
             cells.append(_md_cell([
                 "---\n",
-                f"\n## 節點 {node.node_id} — {node.hypothesis}\n",
-                f"\n**決策**: {label}　｜　**{parent_str}**\n",
+                f"\n## 節點 {node.node_id} {status_icon} — {node.hypothesis}\n",
+                f"\n**{parent_str}**\n",
             ]))
 
             # Code cell
@@ -212,16 +223,14 @@ class Session:
                     img_lines.append(f"![{fname}](./{fname})\n\n")
                 cells.append(_md_cell(img_lines))
 
-            # Insight
-            cells.append(_md_cell([
-                f"**🔍 發現**：{node.insight}\n",
-                "\n",
-                f"**決策理由**：{node.decision_rationale or '—'}\n",
-            ]))
-            if node.next_hypothesis:
-                cells.append(_md_cell([
-                    f"**⬇ 下一個假設**：{node.next_hypothesis}\n",
-                ]))
+            # Insight + mini_summary
+            insight_lines = [f"**🔍 發現**：{node.insight}\n"]
+            if node.mini_summary:
+                insight_lines += ["\n", f"**📝 小結**：{node.mini_summary}\n"]
+            cells.append(_md_cell(insight_lines))
+            if node.next_hypotheses:
+                nh_lines = ["**⬇ 子假設**：\n"] + [f"- {h}\n" for h in node.next_hypotheses]
+                cells.append(_md_cell(nh_lines))
 
         # Final story summary cell
         story_path = self.session_dir / "story.md"

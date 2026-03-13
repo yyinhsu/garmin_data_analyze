@@ -1,5 +1,9 @@
 """
 Analysis tree: stores nodes as JSON, generates summaries for the agent.
+
+Each node can have multiple children (true branching tree).
+- status "open"   : branch still active / children pending
+- status "closed" : branch exhausted, mini_summary recorded
 """
 from __future__ import annotations
 
@@ -9,10 +13,8 @@ from datetime import datetime
 from pathlib import Path
 
 DECISION_LABELS = {
-    "a": "深挖 (drill-down)",
-    "b": "側探 (explore related variable)",
-    "c": "回溯 (backtrack)",
-    "d": "停止 (stop — sufficient conclusion)",
+    "open":   "🔀 分支探索中",
+    "closed": "✅ 此路已結",
 }
 
 
@@ -25,9 +27,10 @@ class AnalysisNode:
     stdout: str = ""
     png_paths: list[str] = field(default_factory=list)
     insight: str = ""
-    decision: str = ""          # a / b / c / d
+    mini_summary: str = ""          # per-branch conclusion (filled when closed)
+    status: str = "open"            # "open" | "closed"
+    next_hypotheses: list[str] = field(default_factory=list)   # pending child branches
     decision_rationale: str = ""
-    next_hypothesis: str = ""
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
@@ -51,9 +54,10 @@ class AnalysisTree:
         stdout: str,
         png_paths: list[str],
         insight: str,
-        decision: str,
-        decision_rationale: str,
-        next_hypothesis: str = "",
+        mini_summary: str = "",
+        status: str = "open",
+        next_hypotheses: list[str] | None = None,
+        decision_rationale: str = "",
     ) -> AnalysisNode:
         node = AnalysisNode(
             node_id=self._next_id,
@@ -63,21 +67,32 @@ class AnalysisTree:
             stdout=stdout,
             png_paths=png_paths,
             insight=insight,
-            decision=decision,
+            mini_summary=mini_summary,
+            status=status,
+            next_hypotheses=next_hypotheses or [],
             decision_rationale=decision_rationale,
-            next_hypothesis=next_hypothesis,
         )
         self.nodes.append(node)
         self._next_id += 1
         self.save()
         return node
 
-    def backtrack(self) -> tuple[int | None, str]:
-        """Return (parent_id, parent_hypothesis) of last non-dead-end node."""
-        for node in reversed(self.nodes):
-            if node.decision in ("a", "b", ""):  # not yet exhausted
-                return node.node_id, node.hypothesis
-        return None, self.topic
+    def close_node(self, node_id: int, mini_summary: str):
+        """Mark a node as closed with a mini-summary."""
+        self.nodes[node_id].status = "closed"
+        self.nodes[node_id].mini_summary = mini_summary
+        self.save()
+
+    def children(self, node_id: int) -> list[AnalysisNode]:
+        return [n for n in self.nodes if n.parent_id == node_id]
+
+    def open_leaves(self) -> list[AnalysisNode]:
+        """Nodes that are open and have no children yet (unexplored branches)."""
+        child_ids = {n.parent_id for n in self.nodes if n.parent_id is not None}
+        return [n for n in self.nodes if n.status == "open" and n.node_id not in child_ids]
+
+    def all_closed(self) -> bool:
+        return all(n.status == "closed" for n in self.nodes) if self.nodes else False
 
     def current_node(self) -> AnalysisNode | None:
         return self.nodes[-1] if self.nodes else None
@@ -86,24 +101,51 @@ class AnalysisTree:
     # Summary for agent context
     # ------------------------------------------------------------------ #
 
-    def summary(self, max_nodes: int = 12) -> str:
-        """Compact text summary of the tree to fit in agent context."""
+    def summary(self, max_nodes: int = 20) -> str:
+        """ASCII tree summary showing branch structure and open leaves."""
         if not self.nodes:
             return "(尚無分析節點)"
 
         lines = [f"主題: {self.topic}", ""]
-        recent = self.nodes[-max_nodes:]
-        for n in recent:
-            indent = "  " * self._depth(n.node_id)
-            decision_str = DECISION_LABELS.get(n.decision, n.decision)
-            lines.append(
-                f"{indent}[節點 {n.node_id}] 假設: {n.hypothesis}"
-            )
+
+        # Build child map
+        children_map: dict[int | None, list[AnalysisNode]] = {}
+        for n in self.nodes:
+            children_map.setdefault(n.parent_id, []).append(n)
+
+        def _render(node_id: int | None, prefix: str, is_last: bool):
+            if node_id is None:
+                for i, root in enumerate(children_map.get(None, [])):
+                    _render(root.node_id, "", i == len(children_map.get(None, [])) - 1)
+                return
+            n = self.nodes[node_id]
+            connector = "└─ " if is_last else "├─ "
+            status_icon = "✅" if n.status == "closed" else "🔵"
+            lines.append(f"{prefix}{connector}{status_icon} [{n.node_id}] {n.hypothesis}")
             if n.insight:
-                lines.append(f"{indent}  → 發現: {n.insight}")
-            if n.decision:
-                lines.append(f"{indent}  → 決策: {decision_str}")
-            lines.append("")
+                child_prefix = prefix + ("   " if is_last else "│  ")
+                lines.append(f"{child_prefix}   💡 {n.insight}")
+            if n.mini_summary:
+                child_prefix = prefix + ("   " if is_last else "│  ")
+                lines.append(f"{child_prefix}   📝 小結: {n.mini_summary}")
+            kids = children_map.get(n.node_id, [])
+            child_prefix = prefix + ("   " if is_last else "│  ")
+            for i, kid in enumerate(kids):
+                _render(kid.node_id, child_prefix, i == len(kids) - 1)
+
+        _render(None, "", True)
+        lines.append("")
+
+        # Show open leaves
+        open_leaves = self.open_leaves()
+        if open_leaves:
+            lines.append("🔀 待探索分支：")
+            for n in open_leaves:
+                lines.append(f"  → [{n.node_id}] {n.hypothesis}")
+                for h in n.next_hypotheses:
+                    lines.append(f"       子假設: {h}")
+        else:
+            lines.append("（所有分支已結束）")
 
         return "\n".join(lines)
 
@@ -129,6 +171,19 @@ class AnalysisTree:
         data = json.loads(json_path.read_text())
         tree = cls(topic=data["topic"], output_dir=json_path.parent)
         for nd in data["nodes"]:
+            # backwards compat: old nodes have next_hypothesis (str) not next_hypotheses (list)
+            if "next_hypothesis" in nd and "next_hypotheses" not in nd:
+                nh = nd.pop("next_hypothesis")
+                nd["next_hypotheses"] = [nh] if nh else []
+            # old nodes have decision (a/b/c/d) not status
+            if "decision" in nd and "status" not in nd:
+                d = nd.pop("decision")
+                nd["status"] = "closed" if d == "d" else "open"
+            elif "decision" in nd:
+                nd.pop("decision")
+            nd.setdefault("mini_summary", "")
+            nd.setdefault("status", "open")
+            nd.setdefault("next_hypotheses", [])
             tree.nodes.append(AnalysisNode(**nd))
         tree._next_id = len(tree.nodes)
         return tree
@@ -141,22 +196,18 @@ class AnalysisTree:
         lines = ["# 數據分析故事線\n", f"**主題**: {self.topic}\n"]
         lines.append(f"**分析節點數**: {len(self.nodes)}\n")
         lines.append("---\n")
-
-        def _render(node_id: int, depth: int):
-            n = self.nodes[node_id]
-            prefix = "#" * min(depth + 2, 6)
-            decision_str = DECISION_LABELS.get(n.decision, "")
-            lines.append(f"{prefix} 節點 {n.node_id}: {n.hypothesis}\n")
-            if n.insight:
-                lines.append(f"**發現**: {n.insight}\n")
-            if n.decision:
-                lines.append(f"**決策**: {decision_str}")
-                if n.decision_rationale:
-                    lines.append(f" — {n.decision_rationale}")
-                lines.append("\n")
-            lines.append("")
+        lines.append(self.summary())
+        lines.append("\n---\n")
 
         for n in self.nodes:
-            _render(n.node_id, self._depth(n.node_id))
+            depth = self._depth(n.node_id)
+            prefix = "#" * min(depth + 2, 6)
+            status_icon = "✅" if n.status == "closed" else "🔵"
+            lines.append(f"{prefix} {status_icon} 節點 {n.node_id}: {n.hypothesis}\n")
+            if n.insight:
+                lines.append(f"**發現**: {n.insight}\n")
+            if n.mini_summary:
+                lines.append(f"**小結**: {n.mini_summary}\n")
+            lines.append("")
 
         return "\n".join(lines)

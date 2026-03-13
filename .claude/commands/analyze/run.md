@@ -88,11 +88,9 @@ cd /Users/yinhsu/Documents/side_project/garmin_data_analyze
 
 ## Step 1 — Session setup
 
-Run this to find or create a session:
-
 ```bash
 cd /Users/yinhsu/Documents/side_project/garmin_data_analyze
-.venv/bin/python -c "
+.venv/bin/python << 'PYEOF'
 import sys; sys.path.insert(0, 'analysis')
 from auto_analyst.session import Session
 
@@ -109,131 +107,110 @@ else:
     print('NEW')
     print('DIR:', session.session_dir)
     print('NEXT_ID:', session.next_node_id)
-"
+PYEOF
 ```
 
-- **RESUME**: Read the tree summary. Understand what has already been explored.
+- **RESUME**: Read the tree summary. Identify all open leaves — these are the branches to continue.
 - **NEW**: Proceed to the exploratory overview.
 
 ---
 
 ## Step 2 — Exploratory overview (new sessions only)
 
-Write analysis code that computes a **correlation matrix** between `pace_min_km` (or the relevant target variable) and all candidate predictors. Plot a heatmap + top-5 scatter plots.
+Compute a correlation matrix between the target variable and all candidate predictors. Plot a heatmap.
 
-Run it using the executor:
-
-```bash
-cd /Users/yinhsu/Documents/side_project/garmin_data_analyze
-.venv/bin/python -c "
-import sys; sys.path.insert(0, 'analysis')
-from auto_analyst.session import Session
-from auto_analyst.executor import run
-from pathlib import Path
-
-session = Session.latest_unfinished()
-node_id = session.next_node_id
-
-code = '''
-# YOUR ANALYSIS CODE HERE — do NOT import or load data, it's already done
-# Available: runs, daily, df_sleep, runs_daily, runs_sleep
-# Call plt.show() after each figure to save it
-
-cols = ['pace_min_km', 'avg_hr', 'avg_cadence', 'aerobic_eff',
-        'vigorous_ratio', 'distance_km', 'ascent', 'hour']
-corr = runs[cols].corr(method='spearman')
-print(corr['pace_min_km'].sort_values())
-
-import seaborn as sns
-fig, ax = plt.subplots(figsize=(8, 6))
-sns.heatmap(corr, annot=True, fmt='.2f', center=0, ax=ax, cmap='RdBu_r')
-ax.set_title('Spearman 相關矩陣 — 跑步指標')
-plt.show()
-'''
-
-result = run(code, output_dir=session.session_dir, node_id=node_id)
-print(result.stdout)
-print('SUCCESS:', result.success)
-if not result.success:
-    print('STDERR:', result.stderr[:500])
-print('PNGS:', [str(p) for p in result.png_paths])
-"
-```
-
-After running, **read each PNG** using the Read tool to see the charts:
-```
-Read: analysis/auto_analyst/outputs/<session_dir>/node_0_chart_0.png
-```
+After reading the chart, **propose 2–4 first-level branches** to explore (the most promising hypotheses). Record as node 0 with `next_hypotheses`.
 
 ---
 
-## Step 3 — Record the node
+## Step 3 — Record each node
 
-After each analysis round, record it:
+After every analysis round:
 
 ```bash
-.venv/bin/python -c "
+.venv/bin/python << 'PYEOF'
 import sys; sys.path.insert(0, 'analysis')
 from auto_analyst.session import Session
 
 session = Session.latest_unfinished()
 session.add_node(
-    hypothesis='HYPOTHESIS',
-    parent_id=PARENT_ID,   # None for root nodes
+    hypothesis='THIS_HYPOTHESIS',
+    parent_id=PARENT_ID,          # None for root; int for child nodes
     code='''CODE''',
     stdout='''STDOUT''',
-    png_paths=['PATH1', 'PATH2'],
-    insight='INSIGHT',
-    decision='DECISION',   # a=深挖 b=側探 c=回溯 d=結論
-    next_hypothesis='NEXT_HYPOTHESIS',
+    png_paths=['PATH1'],
+    insight='KEY_FINDING_WITH_NUMBERS',
+    mini_summary='ONE_SENTENCE_CONCLUSION_EVEN_IF_NEGATIVE',  # always fill this
+    status='open',                # 'open' = has children to explore; 'closed' = dead end
+    next_hypotheses=[             # list the child branches you plan to explore next
+        'Child hypothesis A',
+        'Child hypothesis B',
+    ],
 )
 print('Node recorded. Next ID:', session.next_node_id)
-"
+print(session.summary())
+PYEOF
 ```
+
+**Rules:**
+- `mini_summary` is **always required** — write a one-sentence conclusion whether the hypothesis is confirmed or rejected.
+- `status='closed'` when this branch has no further exploration value.
+- `status='open'` when you have child hypotheses to explore.
+- `next_hypotheses` can list **multiple** children — explore them one by one.
 
 ---
 
-## Step 4 — Analysis loop (repeat from Step 2 code pattern)
+## Step 4 — Analysis loop (tree traversal)
 
-For each subsequent hypothesis:
-1. Write focused analysis code (correlations, group comparisons, scatter plots)
-2. Run via executor with the current `node_id`
-3. Read the PNG(s)
-4. Interpret the numbers + chart pattern
-5. Record the node
-6. **Pause and present findings** (see format below)
+The analysis proceeds as a **depth-first tree exploration**:
 
-The code you write should be direct analysis — no setup, no data loading.
+1. Pick the most promising open leaf from the tree summary.
+2. Write focused analysis code for that hypothesis.
+3. Run via executor with current `node_id`.
+4. Read the PNG(s).
+5. Interpret findings.
+6. Record the node (with `mini_summary` + `next_hypotheses` if branching further).
+7. **Pause and present findings.**
+
+**Branching**: After any node, you may propose 1–3 child hypotheses. List them all in `next_hypotheses`. Explore one immediately; return to the others later.
+
+**Closing a branch**: When a hypothesis yields no signal or there's nothing more to investigate, record with `status='closed'` and write a clear `mini_summary` (e.g., "睡眠時長與跑步表現無顯著關聯 (p=0.42)")
+
+**Session ends** when all branches are closed OR the user says "結束分析".
 
 ---
 
 ## Pause format (after every round)
-
-End your response with this block:
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 節點 N — [假設]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔍 發現：[2-3 句，引用具體數值]
+📝 小結：[一句話結論，不管假設是否成立]
 
-⬇ 建議下一步（決策 X）：
-  [具體的下一個假設]
+🌿 目前樹狀態：
+  [貼上 session.summary() 輸出]
+
+⬇ 下一步探索（選擇以下其中一個分支）：
+  A. [子假設 A]
+  B. [子假設 B]
+  C. [子假設 C（若有）]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-回覆：「繼續」/ 新方向 / 「結束分析」
+回覆：「A」/ 「B」/ 「全部」/ 新方向 / 「結束分析」
 ```
 
 ---
 
 ## Ending the session
 
-When the user says "結束分析" (or you have sufficient conclusions):
-1. Write a Markdown story with: 核心結論（附數值）、因果鏈、無顯著發現的路徑、後續建議
-2. Save it (this also auto-generates `story.md` with embedded charts and `workflow.ipynb`):
+When all branches closed or user says "結束分析":
+1. Write a Markdown story: 核心結論（附數值）、探索樹結構、無顯著發現的路徑及原因、後續建議
+2. Save:
 
 ```bash
-.venv/bin/python -c "
+.venv/bin/python << 'PYEOF'
 import sys; sys.path.insert(0, 'analysis')
 from auto_analyst.session import Session
 
@@ -241,10 +218,10 @@ session = Session.latest_unfinished()
 story = '''STORY_MARKDOWN'''
 session.save_story(story)
 print('Saved:', session.session_dir)
-"
+PYEOF
 ```
 
-`save_story()` automatically produces three files:
-- `story.md` — narrative report with embedded chart images
-- `workflow.ipynb` — Jupyter notebook with all code, outputs, charts, and insights per node
-- `tree.md` — raw analysis tree in Markdown
+`save_story()` automatically produces:
+- `story.md` — narrative report with embedded charts
+- `workflow.ipynb` — Jupyter notebook with all code, outputs, and insights per node
+- `tree.md` — full analysis tree in Markdown
