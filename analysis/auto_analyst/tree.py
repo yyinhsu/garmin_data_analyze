@@ -87,9 +87,21 @@ class AnalysisTree:
         return [n for n in self.nodes if n.parent_id == node_id]
 
     def open_leaves(self) -> list[AnalysisNode]:
-        """Nodes that are open and have no children yet (unexplored branches)."""
-        child_ids = {n.parent_id for n in self.nodes if n.parent_id is not None}
-        return [n for n in self.nodes if n.status == "open" and n.node_id not in child_ids]
+        """Nodes that are open and still have unexplored next_hypotheses."""
+        children_count: dict[int, int] = {}
+        for n in self.nodes:
+            if n.parent_id is not None:
+                children_count[n.parent_id] = children_count.get(n.parent_id, 0) + 1
+        result = []
+        for n in self.nodes:
+            if n.status != "open":
+                continue
+            n_children = children_count.get(n.node_id, 0)
+            n_pending = len(n.next_hypotheses) - n_children
+            # open if: no children yet, or still has unexplored next_hypotheses
+            if n_children == 0 or n_pending > 0:
+                result.append(n)
+        return result
 
     def all_closed(self) -> bool:
         return all(n.status == "closed" for n in self.nodes) if self.nodes else False
@@ -139,11 +151,18 @@ class AnalysisTree:
         # Show open leaves
         open_leaves = self.open_leaves()
         if open_leaves:
+            # compute children counts for pending display
+            children_count: dict[int, int] = {}
+            for n in self.nodes:
+                if n.parent_id is not None:
+                    children_count[n.parent_id] = children_count.get(n.parent_id, 0) + 1
             lines.append("🔀 待探索分支：")
             for n in open_leaves:
-                lines.append(f"  → [{n.node_id}] {n.hypothesis}")
-                for h in n.next_hypotheses:
-                    lines.append(f"       子假設: {h}")
+                n_done = children_count.get(n.node_id, 0)
+                pending = n.next_hypotheses[n_done:]
+                lines.append(f"  → [{n.node_id}] (已探索 {n_done}/{len(n.next_hypotheses)})")
+                for h in pending:
+                    lines.append(f"       • {h}")
         else:
             lines.append("（所有分支已結束）")
 
