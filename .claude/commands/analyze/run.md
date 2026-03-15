@@ -174,7 +174,28 @@ The analysis proceeds as a **depth-first tree exploration**:
 
 **Branching**: After any node, you may propose 1–3 child hypotheses. List them all in `next_hypotheses`. Explore one immediately; return to the others later.
 
-**Closing a branch**: When a hypothesis yields no signal or there's nothing more to investigate, record with `status='closed'` and write a clear `mini_summary` (e.g., "睡眠時長與跑步表現無顯著關聯 (p=0.42)")
+**Deep exploration mindset**: Don't give up easily. When a result is ambiguous or marginal:
+- Try **alternative operationalizations** (e.g., continuous → categorical, different window sizes, log transform)
+- Try **subgroup analysis** (e.g., only flat routes, only morning runs, only weekdays)
+- Try **non-linear models** (e.g., quadratic terms, LOWESS visual inspection for U-shaped patterns)
+- Try **different control strategies** (e.g., stratification instead of regression, propensity matching)
+- Ask: "What would I need to see to change my conclusion?" — then test that specific scenario
+
+**Closing a branch**: Only close when **all** of the following are true:
+1. p > 0.2 after controlling for known confounders, **AND**
+2. No subgroup or non-linear pattern visible in the chart, **AND**
+3. No alternative operationalization or feature engineering could rescue the hypothesis.
+
+If **any** of these hold, keep exploring instead of closing:
+- p < 0.1 (even marginal) → try subgroup analysis, non-linear models, or alternative metrics
+- Effect is confounded → don't just close; test if the effect survives a different control strategy (e.g., stratified analysis, matching, residualization)
+- Significant in raw but not after control → propose **why** and test the mechanism (mediation analysis, instrumental variable, or natural experiment within the data)
+- Small sample per group → try bootstrapping confidence intervals or different grouping thresholds before giving up
+- A "definitional" or "tautological" correlation → reframe the hypothesis to test the causal direction (e.g., does deliberately higher intensity on same route → faster pace?)
+
+Write a clear `mini_summary` regardless (e.g., "睡眠時長與跑步表現無顯著關聯 (p=0.42)")
+
+**Depth target**: Aim for at least **3 levels deep** on promising branches before closing. A single null result is not sufficient — try at least one alternative approach before closing.
 
 **Session ends** when all branches are closed OR the user says "結束分析".
 
