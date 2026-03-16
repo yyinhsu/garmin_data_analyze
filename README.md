@@ -14,13 +14,12 @@ Syncs data from Garmin Connect and runs both manual notebook analysis and a **Cl
 
 ## Setup
 
-### 1. Clone and create virtualenv
+### 1. Clone and install dependencies
 
 ```bash
 git clone <repo>
 cd garmin_data_analyze
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+uv sync
 ```
 
 ### 2. Configure GarminDB
@@ -56,8 +55,8 @@ garmin_data_analyze/
 │   ├── sleep_deep_analysis.ipynb
 │   └── sleep_causal_investigation.ipynb
 ├── tests/                             # Unit tests (pytest)
-├── pyproject.toml                     # Ruff + pytest config
-├── requirements.txt
+├── pyproject.toml                     # Project deps + ruff + pytest config
+├── uv.lock                           # Locked dependency versions
 └── sync_garmin.sh
 ```
 

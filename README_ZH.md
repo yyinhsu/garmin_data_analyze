@@ -14,13 +14,12 @@
 
 ## 安裝與設定
 
-### 1. 建立虛擬環境
+### 1. 安裝依賴
 
 ```bash
 git clone <repo>
 cd garmin_data_analyze
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+uv sync
 ```
 
 ### 2. 設定 GarminDB
@@ -56,8 +55,8 @@ garmin_data_analyze/
 │   ├── sleep_deep_analysis.ipynb
 │   └── sleep_causal_investigation.ipynb
 ├── tests/                             # 單元測試（pytest）
-├── pyproject.toml                     # Ruff + pytest 設定
-├── requirements.txt
+├── pyproject.toml                     # 專案依賴 + ruff + pytest 設定
+├── uv.lock                           # 鎖定的依賴版本
 └── sync_garmin.sh
 ```
 

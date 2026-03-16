@@ -15,15 +15,17 @@ Keep all three files in sync. `CLAUDE.md` is a symlink to this file and does not
 
 ## Python Environment
 
-Always use `./.venv` as the Python environment for this project.
+This project uses **uv** for dependency and environment management.
 
 ```bash
-.venv/bin/python script.py
-# or
-.venv/bin/python -c "..."
+uv sync                    # install/update all dependencies
+.venv/bin/python script.py # run scripts
+uv run pytest tests/ -q    # run via uv (auto-syncs)
+uv add <package>           # add a dependency
+uv add --group dev <pkg>   # add a dev dependency
 ```
 
-Do NOT use the system `python3`.
+Do NOT use `pip install` or the system `python3`.
 
 ## Autonomous Analysis Agent
 
