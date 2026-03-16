@@ -231,7 +231,7 @@ class AnalysisTree:
         return "\n".join(lines)
 
     def _compact_tree(self) -> str:
-        """Compact tree showing only node id, hypothesis, and status."""
+        """Compact tree showing node id, hypothesis, verdict, and key result."""
         if not self.nodes:
             return "(尚無分析節點)"
         result: list[str] = [f"主題: {self.topic}"]
@@ -244,6 +244,10 @@ class AnalysisTree:
             connector = "└─ " if is_last else "├─ "
             icon = "✅" if n.status == "closed" else "🔵"
             result.append(f"{prefix}{connector}{icon} [{n.node_id}] {n.hypothesis}")
+            # Show mini_summary (verdict + key result) on the next line
+            if n.mini_summary:
+                detail_prefix = prefix + ("   " if is_last else "│  ")
+                result.append(f"{detail_prefix}   📝 {n.mini_summary}")
             kids = children_map.get(n.node_id, [])
             child_prefix = prefix + ("   " if is_last else "│  ")
             for i, kid in enumerate(kids):

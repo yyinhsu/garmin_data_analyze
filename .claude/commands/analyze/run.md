@@ -90,7 +90,7 @@ cd /Users/yinhsu/Documents/side_project/garmin_data_analyze
 
 ```bash
 cd /Users/yinhsu/Documents/side_project/garmin_data_analyze
-.venv/bin/python << 'PYEOF'
+uv run python << 'PYEOF'
 import sys; sys.path.insert(0, 'analysis')
 from auto_analyst.session import Session
 
@@ -119,7 +119,7 @@ PYEOF
 
 Compute a correlation matrix between the target variable and all candidate predictors. Plot a heatmap.
 
-After reading the chart, **propose 2–4 first-level branches** to explore (the most promising hypotheses). Record as node 0 with `next_hypotheses`.
+After reading the chart, **propose 3–5 first-level branches** to explore (the most promising hypotheses). Record as node 0 with `next_hypotheses`.
 
 ---
 
@@ -128,7 +128,7 @@ After reading the chart, **propose 2–4 first-level branches** to explore (the 
 After every analysis round:
 
 ```bash
-.venv/bin/python << 'PYEOF'
+uv run python << 'PYEOF'
 import sys; sys.path.insert(0, 'analysis')
 from auto_analyst.session import Session
 
@@ -172,7 +172,7 @@ The analysis proceeds as a **depth-first tree exploration**:
 6. Record the node (with `mini_summary` + `next_hypotheses` if branching further).
 7. **Pause and present findings.**
 
-**Branching**: After any node, you may propose 1–3 child hypotheses. List them all in `next_hypotheses`. Explore one immediately; return to the others later.
+**Branching**: After any node, propose **3–5 child hypotheses** in `next_hypotheses`. Explore one immediately; return to the others later. More branches = more thorough exploration. Only propose fewer than 3 when there truly aren't enough meaningful angles left.
 
 **Deep exploration mindset**: Don't give up easily. When a result is ambiguous or marginal:
 - Try **alternative operationalizations** (e.g., continuous → categorical, different window sizes, log transform)
@@ -195,7 +195,7 @@ If **any** of these hold, keep exploring instead of closing:
 
 Write a clear `mini_summary` regardless (e.g., "睡眠時長與跑步表現無顯著關聯 (p=0.42)")
 
-**Depth target**: Aim for at least **3 levels deep** on promising branches before closing. A single null result is not sufficient — try at least one alternative approach before closing.
+**Depth target**: Aim for at least **5 levels deep** on promising branches before closing. A single null result is not sufficient — try at least **two** alternative approaches before closing. Shallow trees (≤3 levels) indicate insufficient exploration.
 
 **Session ends** when all branches are closed OR the user says "結束分析".
 
@@ -231,7 +231,7 @@ When all branches closed or user says "結束分析":
 2. Save:
 
 ```bash
-.venv/bin/python << 'PYEOF'
+uv run python << 'PYEOF'
 import sys; sys.path.insert(0, 'analysis')
 from auto_analyst.session import Session
 
