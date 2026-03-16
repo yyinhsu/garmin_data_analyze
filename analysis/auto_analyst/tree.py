@@ -215,18 +215,69 @@ class AnalysisTree:
         lines = ["# 數據分析故事線\n", f"**主題**: {self.topic}\n"]
         lines.append(f"**分析節點數**: {len(self.nodes)}\n")
         lines.append("---\n")
-        lines.append(self.summary())
-        lines.append("\n---\n")
 
-        for n in self.nodes:
-            depth = self._depth(n.node_id)
-            prefix = "#" * min(depth + 2, 6)
-            status_icon = "✅" if n.status == "closed" else "🔵"
-            lines.append(f"{prefix} {status_icon} 節點 {n.node_id}: {n.hypothesis}\n")
-            if n.insight:
-                lines.append(f"**發現**: {n.insight}\n")
-            if n.mini_summary:
-                lines.append(f"**小結**: {n.mini_summary}\n")
-            lines.append("")
+        # Compact tree overview (no insight/summary, just structure)
+        lines.append("## 樹狀結構總覽\n")
+        lines.append("```")
+        lines.append(self._compact_tree())
+        lines.append("```\n")
+
+        lines.append("---\n")
+
+        # Detailed tree with full insight/summary using indentation
+        lines.append("## 詳細節點\n")
+        lines.append(self._detailed_tree())
 
         return "\n".join(lines)
+
+    def _compact_tree(self) -> str:
+        """Compact tree showing only node id, hypothesis, and status."""
+        if not self.nodes:
+            return "(尚無分析節點)"
+        result: list[str] = [f"主題: {self.topic}"]
+        children_map: dict[int | None, list[AnalysisNode]] = {}
+        for n in self.nodes:
+            children_map.setdefault(n.parent_id, []).append(n)
+
+        def _walk(node_id: int, prefix: str, is_last: bool):
+            n = self.nodes[node_id]
+            connector = "└─ " if is_last else "├─ "
+            icon = "✅" if n.status == "closed" else "🔵"
+            result.append(f"{prefix}{connector}{icon} [{n.node_id}] {n.hypothesis}")
+            kids = children_map.get(n.node_id, [])
+            child_prefix = prefix + ("   " if is_last else "│  ")
+            for i, kid in enumerate(kids):
+                _walk(kid.node_id, child_prefix, i == len(kids) - 1)
+
+        roots = children_map.get(None, [])
+        for i, root in enumerate(roots):
+            _walk(root.node_id, "", i == len(roots) - 1)
+        return "\n".join(result)
+
+    def _detailed_tree(self) -> str:
+        """Detailed tree with insight and mini_summary, using indentation."""
+        if not self.nodes:
+            return ""
+        result: list[str] = []
+        children_map: dict[int | None, list[AnalysisNode]] = {}
+        for n in self.nodes:
+            children_map.setdefault(n.parent_id, []).append(n)
+
+        def _walk(node_id: int, depth: int):
+            n = self.nodes[node_id]
+            indent = "  " * depth
+            icon = "✅" if n.status == "closed" else "🔵"
+            result.append(f"{indent}{icon} **[{n.node_id}] {n.hypothesis}**\n")
+            detail_indent = indent + "> "
+            if n.insight:
+                result.append(f"{detail_indent}💡 {n.insight}\n")
+            if n.mini_summary:
+                result.append(f"{detail_indent}📝 {n.mini_summary}\n")
+            kids = children_map.get(n.node_id, [])
+            for kid in kids:
+                _walk(kid.node_id, depth + 1)
+
+        roots = children_map.get(None, [])
+        for root in roots:
+            _walk(root.node_id, 0)
+        return "\n".join(result)
